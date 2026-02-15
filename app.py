@@ -7,8 +7,7 @@ import pandas as pd
 st.set_page_config(page_title="Simulação Logística: Etapa 2", layout="wide")
 st.title("📊 Dashboard de Logística: Centralizado vs. Descentralizado")
 st.markdown("""
-Este painel simula a operação logística de 365 dias. 
-Agora com **Cálculo Robusto de ROP** e **Parâmetros Equivalentes**, permitindo testar puramente o efeito do Risk Pooling.
+Este painel simula a operação logística de 365 dias.
 """)
 
 # --- 2. CLASSE DE SIMULAÇÃO (O Motor) ---
@@ -106,9 +105,7 @@ fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.5, he
 
 env = simpy.Environment()
 
-# --- AJUSTE FINAL: CENÁRIOS EQUIVALENTES ---
-# Removemos penalidades arbitrárias do Centralizado.
-# A diferença agora é puramente a Física (Distância/Frete) vs Estatística (Risk Pooling).
+# --- PARAMETRIZAÇÃO DOS CENÁRIOS ---
 
 # Cenário A (Descentralizado)
 params_norte = {
@@ -140,15 +137,14 @@ params_centro ={
 }
 
 # Cenário B (Centralizado - Risk Pooling)
-# O desvio padrão é menor aqui (Raiz da soma dos quadrados) -> Vantagem Estatística
 std_central = np.sqrt((volatilidade/30)**2 + ((volatilidade+5)/30)**2 + ((volatilidade-5)/30)**2)
 
 params_central = {
     'demanda_media': 10.4, 
     'demanda_std': std_central, 
-    'lead_time_media': lead_time_base,          # SEM PÊNALTI (+0)
-    'lead_time_std': incerteza_transporte,      # SEM PÊNALTI (+0)
-    'custo_frete': 3.80,                        # Frete mais caro (Desvantagem Física)
+    'lead_time_media': lead_time_base,
+    'lead_time_std': incerteza_transporte,
+    'custo_frete': 3.80, # Frete mais caro
     'estoque_inicial': 150, 
     'fator_seguranca': fator_seguranca
 }
@@ -199,14 +195,25 @@ data_custos = pd.DataFrame({
 })
 st.bar_chart(data_custos, x="Cenário", y="Custo Total (R$)")
 
-# D. Análise Automática
+# D. Análise Automática Corrigida
 diff_ruptura = rupturas_A - rupturas_B
 st.write("---")
 st.subheader("📝 Conclusão Automática da Simulação")
 
-if rupturas_B < rupturas_A and custo_total_B < custo_total_A:
-    st.success(f"🏆 **VITÓRIA DO CENTRALIZADO!** O Risk Pooling funcionou e o Estoque de Segurança absorveu a incerteza do transporte.")
+# Caso de Empate ou Zero Rupturas (Estabilidade)
+if rupturas_A == rupturas_B:
+    if custo_total_B < custo_total_A:
+        st.success(f"✅ **CENÁRIO ESTÁVEL:** Ambos os modelos atenderam bem a demanda ({rupturas_A:.0f} rupturas). O Centralizado venceu por ser financeiramente mais barato.")
+    else:
+        st.info(f"✅ **CENÁRIO ESTÁVEL:** Ambos os modelos atenderam bem a demanda ({rupturas_A:.0f} rupturas). O Descentralizado venceu por ter menor custo de frete neste cenário.")
+
+# Vitória do Centralizado (Menos Rupturas)
 elif rupturas_B < rupturas_A:
-    st.info(f"⚖️ **TRADE-OFF:** O Centralizado custou mais (frete), mas é muito mais seguro ({diff_ruptura:.0f} menos rupturas).")
+    if custo_total_B < custo_total_A:
+        st.success(f"🏆 **VITÓRIA DO CENTRALIZADO!** O Risk Pooling funcionou perfeitamente: menos custo e {diff_ruptura:.0f} menos rupturas.")
+    else:
+        st.info(f"⚖️ **TRADE-OFF CLÁSSICO:** O Centralizado custou mais (devido ao frete), mas foi mais seguro ({diff_ruptura:.0f} menos rupturas). Recomendado para produtos críticos.")
+
+# Vitória do Descentralizado (Centralizado pior)
 else:
-    st.warning("⚠️ **ATENÇÃO:** O Centralizado ainda está com mais rupturas. Verifique se o Atraso no Transporte está muito alto.")
+    st.warning("⚠️ **ATENÇÃO:** O Centralizado apresentou mais rupturas. Isso indica que a incerteza do transporte está anulando os ganhos do Risk Pooling.")
