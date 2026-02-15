@@ -91,58 +91,93 @@ lead_time_base = st.sidebar.slider("Lead Time Médio (Dias)", 1, 15, 4)
 incerteza_transporte = st.sidebar.slider("Atrasos no Transporte (Std Dev)", 0.0, 5.0, 1.0)
 
 st.sidebar.markdown("---")
-# NOVO SLIDER: Fator de Segurança
-fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.0, help="Quanto maior, mais cedo o sistema pede reposição para evitar rupturas.")
+fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.0, help="Quanto maior, mais cedo o sistema pede reposição.")
 
-# --- 4. EXECUÇÃO DA SIMULAÇÃO ---
-if st.button("🔄 Rodar Simulação (365 Dias)"):
-    env = simpy.Environment()
-    
-    # Parâmetros baseados na sua Etapa 1
-    # Adicionamos o 'fator_seguranca' em todos os dicionários
-    
-    # Cenário A (Descentralizado)
-    params_norte = {
-        'demanda_media': 3.3, 'demanda_std': volatilidade/30, 
-        'lead_time_media': lead_time_base + 1, 'lead_time_std': incerteza_transporte, 
-        'custo_frete': 2.50, 'estoque_inicial': 50, 'fator_seguranca': fator_seguranca
-    }
-    params_sul = {
-        'demanda_media': 4.1, 'demanda_std': (volatilidade+5)/30, 
-        'lead_time_media': lead_time_base, 'lead_time_std': incerteza_transporte, 
-        'custo_frete': 2.50, 'estoque_inicial': 60, 'fator_seguranca': fator_seguranca
-    }
-    params_centro ={
-        'demanda_media': 3.0, 'demanda_std': (volatilidade-5)/30, 
-        'lead_time_media': lead_time_base - 1, 'lead_time_std': incerteza_transporte, 
-        'custo_frete': 2.50, 'estoque_inicial': 40, 'fator_seguranca': fator_seguranca
-    }
-    
-    # Cenário B (Centralizado - Risk Pooling)
-    std_central = np.sqrt((volatilidade/30)**2 + ((volatilidade+5)/30)**2 + ((volatilidade-5)/30)**2)
-    params_central = {
-        'demanda_media': 10.4, 'demanda_std': std_central, 
-        'lead_time_media': lead_time_base + 2, 'lead_time_std': incerteza_transporte + 1, 
-        'custo_frete': 3.80, 'estoque_inicial': 150, 'fator_seguranca': fator_seguranca
-    }
+# --- 4. EXECUÇÃO AUTOMÁTICA (SEM BOTÃO) ---
+# Removemos o "if st.button" para rodar direto
 
-    # Criando os objetos
-    cd_norte = CentroDistribuicao(env, "Norte (Desc)", params_norte)
-    cd_sul = CentroDistribuicao(env, "Sul (Desc)", params_sul)
-    cd_centro = CentroDistribuicao(env, "Centro (Desc)", params_centro)
-    cd_unico = CentroDistribuicao(env, "Centralizado", params_central)
-    
-    env.run(until=365)
-    
-    # --- 5. VISUALIZAÇÃO DOS RESULTADOS ---
-    
-    # A. Gráfico de Evolução do Estoque
-    st.subheader("1. Evolução do Estoque: Comparativo Diário")
-    df_estoque = pd.DataFrame({
-        "Dia": cd_norte.historico_dias,
-        "Norte (Desc)": cd_norte.historico_estoque,
-        "Sul (Desc)": cd_sul.historico_estoque,
-        "Centro (Desc)": cd_centro.historico_estoque,
-        "Centralizado (Agregado)": cd_unico.historico_estoque
-    })
-    st.line_chart(df_estoque, x="Dia", y=["Norte (Desc)", "Sul (Desc)", "Centro (Desc)", "Centralizado (Agregado)"])
+env = simpy.Environment()
+
+# Parâmetros
+params_norte = {
+    'demanda_media': 3.3, 'demanda_std': volatilidade/30, 
+    'lead_time_media': lead_time_base + 1, 'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 'estoque_inicial': 50, 'fator_seguranca': fator_seguranca
+}
+params_sul = {
+    'demanda_media': 4.1, 'demanda_std': (volatilidade+5)/30, 
+    'lead_time_media': lead_time_base, 'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 'estoque_inicial': 60, 'fator_seguranca': fator_seguranca
+}
+params_centro ={
+    'demanda_media': 3.0, 'demanda_std': (volatilidade-5)/30, 
+    'lead_time_media': lead_time_base - 1, 'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 'estoque_inicial': 40, 'fator_seguranca': fator_seguranca
+}
+
+# Cenário B (Centralizado - Risk Pooling)
+std_central = np.sqrt((volatilidade/30)**2 + ((volatilidade+5)/30)**2 + ((volatilidade-5)/30)**2)
+params_central = {
+    'demanda_media': 10.4, 'demanda_std': std_central, 
+    'lead_time_media': lead_time_base + 2, 'lead_time_std': incerteza_transporte + 1, 
+    'custo_frete': 3.80, 'estoque_inicial': 150, 'fator_seguranca': fator_seguranca
+}
+
+# Criando os objetos
+cd_norte = CentroDistribuicao(env, "Norte (Desc)", params_norte)
+cd_sul = CentroDistribuicao(env, "Sul (Desc)", params_sul)
+cd_centro = CentroDistribuicao(env, "Centro (Desc)", params_centro)
+cd_unico = CentroDistribuicao(env, "Centralizado", params_central)
+
+env.run(until=365)
+
+# --- 5. VISUALIZAÇÃO DOS RESULTADOS ---
+
+# A. Gráfico de Evolução do Estoque
+st.subheader("1. Evolução do Estoque: Comparativo Diário")
+df_estoque = pd.DataFrame({
+    "Dia": cd_norte.historico_dias,
+    "Norte (Desc)": cd_norte.historico_estoque,
+    "Sul (Desc)": cd_sul.historico_estoque,
+    "Centro (Desc)": cd_centro.historico_estoque,
+    "Centralizado (Agregado)": cd_unico.historico_estoque
+})
+st.line_chart(df_estoque, x="Dia", y=["Norte (Desc)", "Sul (Desc)", "Centro (Desc)", "Centralizado (Agregado)"])
+
+st.caption("Dica: Se as linhas tocam o zero, significa ruptura de estoque.")
+
+# B. Comparativo de Custos e Rupturas
+st.subheader("2. Resultado Financeiro e Nível de Serviço")
+col1, col2 = st.columns(2)
+
+custo_total_A = cd_norte.custo_total + cd_sul.custo_total + cd_centro.custo_total
+rupturas_A = cd_norte.vendas_perdidas + cd_sul.vendas_perdidas + cd_centro.vendas_perdidas
+
+custo_total_B = cd_unico.custo_total
+rupturas_B = cd_unico.vendas_perdidas
+
+with col1:
+    st.metric("Custo Total (Descentralizado)", f"R$ {custo_total_A:,.2f}", delta=f"{rupturas_A:.0f} Rupturas (Total)", delta_color="inverse")
+with col2:
+    st.metric("Custo Total (Centralizado)", f"R$ {custo_total_B:,.2f}", delta=f"{rupturas_B:.0f} Rupturas (Total)", delta_color="inverse")
+
+# C. Gráfico de Barras Comparativo
+data_custos = pd.DataFrame({
+    "Cenário": ["Descentralizado", "Centralizado"],
+    "Custo Total (R$)": [custo_total_A, custo_total_B],
+    "Vendas Perdidas (Unid)": [rupturas_A, rupturas_B]
+})
+st.bar_chart(data_custos, x="Cenário", y="Custo Total (R$)")
+
+# D. Análise Automática
+diff_ruptura = rupturas_A - rupturas_B
+st.write("---")
+st.subheader("📝 Conclusão Automática da Simulação")
+
+# Lógica forçada para garantir exibição
+if rupturas_B < rupturas_A and custo_total_B < custo_total_A:
+    st.success(f"🏆 **VITÓRIA DO CENTRALIZADO!** O Risk Pooling funcionou. Você economizou e teve {diff_ruptura:.0f} menos rupturas.")
+elif rupturas_B < rupturas_A:
+    st.info(f"⚖️ **TRADE-OFF:** O Centralizado é mais caro (devido ao frete), mas muito mais seguro ({diff_ruptura:.0f} menos rupturas).")
+else:
+    st.warning("⚠️ **ATENÇÃO:** O Centralizado está com performance pior. Aumente o Fator de Segurança para corrigir.")
