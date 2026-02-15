@@ -8,7 +8,7 @@ st.set_page_config(page_title="Simulação Logística: Etapa 2", layout="wide")
 st.title("📊 Dashboard de Logística: Centralizado vs. Descentralizado")
 st.markdown("""
 Este painel simula a operação logística de 365 dias. 
-Agora com **Estoque de Segurança** dinâmico para corrigir as rupturas do modelo Centralizado.
+Agora com **Cálculo Robusto de ROP** (considerando incerteza de demanda E transporte).
 """)
 
 # --- 2. CLASSE DE SIMULAÇÃO (O Motor) ---
@@ -49,12 +49,21 @@ class CentroDistribuicao:
                 self.custo_total += qtd_falta * 20.00 
                 self.estoque = 0
             
-            # --- CÁLCULO DO PONTO DE RESSUPRIMENTO (ROP) ---
-            # ROP = (Demanda durante o Lead Time) + ESTOQUE DE SEGURANÇA
+            # --- CÁLCULO DO PONTO DE RESSUPRIMENTO (ROP) ROBUSTO ---
+            # Fórmula: ROP = Demanda_Lead_Time + Fator_Z * sqrt(Var_Demanda + Var_Lead_Time)
+            
+            # 1. Demanda média durante o Lead Time
             demanda_lead_time = self.params['demanda_media'] * self.params['lead_time_media']
             
-            # Estoque de Segurança = Fator Z * Desvio Padrão
-            estoque_seguranca = self.params['fator_seguranca'] * self.params['demanda_std']
+            # 2. Desvio Padrão Combinado (A FÓRMULA CORRIGIDA)
+            # Considera a incerteza da Demanda durante o Lead Time E a incerteza do próprio Lead Time
+            var_demanda_durante_lt = self.params['lead_time_media'] * (self.params['demanda_std']**2)
+            var_lead_time_demand = (self.params['demanda_media']**2) * (self.params['lead_time_std']**2)
+            
+            sigma_combinado = np.sqrt(var_demanda_durante_lt + var_lead_time_demand)
+            
+            # 3. Estoque de Segurança Ajustado
+            estoque_seguranca = self.params['fator_seguranca'] * sigma_combinado
             
             rop = demanda_lead_time + estoque_seguranca
             
@@ -91,10 +100,9 @@ lead_time_base = st.sidebar.slider("Lead Time Médio (Dias)", 1, 15, 4)
 incerteza_transporte = st.sidebar.slider("Atrasos no Transporte (Std Dev)", 0.0, 5.0, 1.0)
 
 st.sidebar.markdown("---")
-fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.0, help="Quanto maior, mais cedo o sistema pede reposição.")
+fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.0, help="Quanto maior, mais estoque de segurança é calculado.")
 
-# --- 4. EXECUÇÃO AUTOMÁTICA (SEM BOTÃO) ---
-# Removemos o "if st.button" para rodar direto
+# --- 4. EXECUÇÃO AUTOMÁTICA ---
 
 env = simpy.Environment()
 
@@ -174,10 +182,9 @@ diff_ruptura = rupturas_A - rupturas_B
 st.write("---")
 st.subheader("📝 Conclusão Automática da Simulação")
 
-# Lógica forçada para garantir exibição
 if rupturas_B < rupturas_A and custo_total_B < custo_total_A:
-    st.success(f"🏆 **VITÓRIA DO CENTRALIZADO!** O Risk Pooling funcionou. Você economizou e teve {diff_ruptura:.0f} menos rupturas.")
+    st.success(f"🏆 **VITÓRIA DO CENTRALIZADO!** O Risk Pooling funcionou e o Estoque de Segurança absorveu a incerteza do transporte.")
 elif rupturas_B < rupturas_A:
-    st.info(f"⚖️ **TRADE-OFF:** O Centralizado é mais caro (devido ao frete), mas muito mais seguro ({diff_ruptura:.0f} menos rupturas).")
+    st.info(f"⚖️ **TRADE-OFF:** O Centralizado custou mais (frete), mas é muito mais seguro ({diff_ruptura:.0f} menos rupturas).")
 else:
-    st.warning("⚠️ **ATENÇÃO:** O Centralizado está com performance pior. Aumente o Fator de Segurança para corrigir.")
+    st.warning("⚠️ **ATENÇÃO:** Mesmo com a correção, o Centralizado está pior. A volatilidade do transporte pode estar alta demais.")
