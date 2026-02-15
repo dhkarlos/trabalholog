@@ -8,7 +8,7 @@ st.set_page_config(page_title="Simulação Logística: Etapa 2", layout="wide")
 st.title("📊 Dashboard de Logística: Centralizado vs. Descentralizado")
 st.markdown("""
 Este painel simula a operação logística de 365 dias. 
-Agora com **Cálculo Robusto de ROP** (considerando incerteza de demanda E transporte).
+Agora com **Cálculo Robusto de ROP** e **Parâmetros Equivalentes**, permitindo testar puramente o efeito do Risk Pooling.
 """)
 
 # --- 2. CLASSE DE SIMULAÇÃO (O Motor) ---
@@ -95,40 +95,62 @@ class CentroDistribuicao:
 st.sidebar.header("⚙️ Parâmetros da Simulação")
 
 # Sliders
-volatilidade = st.sidebar.slider("Volatilidade da Demanda (Desvio Padrão)", 5, 50, 15)
+volatilidade = st.sidebar.slider("Volatilidade da Demanda (Desvio Padrão)", 5, 50, 40)
 lead_time_base = st.sidebar.slider("Lead Time Médio (Dias)", 1, 15, 4)
-incerteza_transporte = st.sidebar.slider("Atrasos no Transporte (Std Dev)", 0.0, 5.0, 1.0)
+incerteza_transporte = st.sidebar.slider("Atrasos no Transporte (Std Dev)", 0.0, 5.0, 0.5)
 
 st.sidebar.markdown("---")
-fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.0, help="Quanto maior, mais estoque de segurança é calculado.")
+fator_seguranca = st.sidebar.slider("Fator de Segurança (Z)", 0.0, 4.0, 2.5, help="Quanto maior, mais estoque de segurança é calculado.")
 
 # --- 4. EXECUÇÃO AUTOMÁTICA ---
 
 env = simpy.Environment()
 
-# Parâmetros
+# --- AJUSTE FINAL: CENÁRIOS EQUIVALENTES ---
+# Removemos penalidades arbitrárias do Centralizado.
+# A diferença agora é puramente a Física (Distância/Frete) vs Estatística (Risk Pooling).
+
+# Cenário A (Descentralizado)
 params_norte = {
-    'demanda_media': 3.3, 'demanda_std': volatilidade/30, 
-    'lead_time_media': lead_time_base + 1, 'lead_time_std': incerteza_transporte, 
-    'custo_frete': 2.50, 'estoque_inicial': 50, 'fator_seguranca': fator_seguranca
+    'demanda_media': 3.3, 
+    'demanda_std': volatilidade/30, 
+    'lead_time_media': lead_time_base, 
+    'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 
+    'estoque_inicial': 50, 
+    'fator_seguranca': fator_seguranca
 }
 params_sul = {
-    'demanda_media': 4.1, 'demanda_std': (volatilidade+5)/30, 
-    'lead_time_media': lead_time_base, 'lead_time_std': incerteza_transporte, 
-    'custo_frete': 2.50, 'estoque_inicial': 60, 'fator_seguranca': fator_seguranca
+    'demanda_media': 4.1, 
+    'demanda_std': (volatilidade+5)/30, 
+    'lead_time_media': lead_time_base, 
+    'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 
+    'estoque_inicial': 60, 
+    'fator_seguranca': fator_seguranca
 }
 params_centro ={
-    'demanda_media': 3.0, 'demanda_std': (volatilidade-5)/30, 
-    'lead_time_media': lead_time_base - 1, 'lead_time_std': incerteza_transporte, 
-    'custo_frete': 2.50, 'estoque_inicial': 40, 'fator_seguranca': fator_seguranca
+    'demanda_media': 3.0, 
+    'demanda_std': (volatilidade-5)/30, 
+    'lead_time_media': lead_time_base, 
+    'lead_time_std': incerteza_transporte, 
+    'custo_frete': 2.50, 
+    'estoque_inicial': 40, 
+    'fator_seguranca': fator_seguranca
 }
 
 # Cenário B (Centralizado - Risk Pooling)
+# O desvio padrão é menor aqui (Raiz da soma dos quadrados) -> Vantagem Estatística
 std_central = np.sqrt((volatilidade/30)**2 + ((volatilidade+5)/30)**2 + ((volatilidade-5)/30)**2)
+
 params_central = {
-    'demanda_media': 10.4, 'demanda_std': std_central, 
-    'lead_time_media': lead_time_base + 2, 'lead_time_std': incerteza_transporte + 1, 
-    'custo_frete': 3.80, 'estoque_inicial': 150, 'fator_seguranca': fator_seguranca
+    'demanda_media': 10.4, 
+    'demanda_std': std_central, 
+    'lead_time_media': lead_time_base,          # SEM PÊNALTI (+0)
+    'lead_time_std': incerteza_transporte,      # SEM PÊNALTI (+0)
+    'custo_frete': 3.80,                        # Frete mais caro (Desvantagem Física)
+    'estoque_inicial': 150, 
+    'fator_seguranca': fator_seguranca
 }
 
 # Criando os objetos
@@ -187,4 +209,4 @@ if rupturas_B < rupturas_A and custo_total_B < custo_total_A:
 elif rupturas_B < rupturas_A:
     st.info(f"⚖️ **TRADE-OFF:** O Centralizado custou mais (frete), mas é muito mais seguro ({diff_ruptura:.0f} menos rupturas).")
 else:
-    st.warning("⚠️ **ATENÇÃO:** Mesmo com a correção, o Centralizado está pior. A volatilidade do transporte pode estar alta demais.")
+    st.warning("⚠️ **ATENÇÃO:** O Centralizado ainda está com mais rupturas. Verifique se o Atraso no Transporte está muito alto.")
